@@ -172,12 +172,13 @@ exports.forgotPassword = async (req, res, next) => {
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
     // Create reset password url
-    const resetUrl = `${req.protocol}://localhost:5173/password/reset/${resetToken}`;
-    const message = `Your password reset token is as follow:\n\n${resetUrl}\n\nIf you have not requested this email, then ignore it.`
+    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+    const resetUrl = `${frontendUrl}/password/reset/${resetToken}`;
+    const message = `Your password reset token is as follows:\n\n${resetUrl}\n\nIf you have not requested this email, then ignore it.`;
     try {
         await sendEmail({
             email: user.email,
-            subject: 'ShopIT Password Recovery',
+            subject: 'Dosnoventa Password Recovery',
             message
         })
 
@@ -718,10 +719,12 @@ exports.socialLogin = async (req, res, next) => {
             { expiresIn: process.env.JWT_EXPIRES_TIME || '7d' }
         );
 
+        const isProduction = process.env.NODE_ENV === 'PRODUCTION';
         const options = {
-            expires: new Date(Date.now() + process.env.COOKIE_EXPIRES_TIME * 24 * 60 * 60 * 1000),
+            expires: new Date(Date.now() + (Number(process.env.COOKIE_EXPIRES_TIME) || 7) * 24 * 60 * 60 * 1000),
             httpOnly: true,
-            sameSite: 'lax'
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'lax'
         };
 
         res.status(200).cookie('token', token, options).json({

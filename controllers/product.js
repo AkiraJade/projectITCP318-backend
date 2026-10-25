@@ -79,10 +79,11 @@ exports.getProducts = async (req, res) => {
     const baseQuery = Product.find({ isPublished: { $ne: false }, isDeleted: { $ne: true } });
     const apiFeatures = new APIFeatures(baseQuery, queryCopy).search().filter();
     const productsCount = await Product.countDocuments({ isPublished: { $ne: false }, isDeleted: { $ne: true } });
+    const countFeatures = new APIFeatures(Product.find({ isPublished: { $ne: false }, isDeleted: { $ne: true } }), queryCopy).search().filter();
+    const filteredProductsCount = await countFeatures.query.countDocuments();
 
     apiFeatures.pagination(resPerPage);
     const products = await apiFeatures.query;
-    let filteredProductsCount = products.length;
 
     if (!products)
         return res.status(400).json({ message: 'error loading products' })
@@ -439,6 +440,7 @@ exports.getProductReviews = async (req, res, next) => {
         const activeReviews = (product.reviews || []).filter(r => !r.isDeleted);
         res.status(200).json({
             success: true,
+            product: { _id: product._id, name: product.name },
             reviews: activeReviews
         });
     } catch (err) {

@@ -85,15 +85,11 @@ exports.newOrder = async (req, res, next) => {
         // 2. Verified Payment Status
         // Do not mark an order as paid without verified payment confirmation
         let verifiedPayment = {
+            method: paymentInfo?.method || 'COD',
             id: paymentInfo?.id || 'COD-' + Date.now(),
-            status: 'Cash on Delivery (Pending Payment)'
+            status: paymentInfo?.status === 'verified_paid' ? 'Paid' : 'Cash on Delivery (Pending Payment)'
         };
-        let paidAt = null;
-
-        if (paymentInfo?.status === 'verified_paid') {
-            verifiedPayment.status = 'Paid';
-            paidAt = Date.now();
-        }
+        let paidAt = paymentInfo?.status === 'verified_paid' ? Date.now() : null;
 
         const order = await Order.create({
             orderItems: verifiedItems,
@@ -150,7 +146,8 @@ exports.getSingleOrder = async (req, res, next) => {
         }
 
         // Prevent unauthorized customers from viewing another user's order
-        if (req.user.role !== 'admin' && order.user._id.toString() !== req.user._id.toString()) {
+        const orderUserId = order.user?._id ? order.user._id.toString() : order.user?.toString();
+        if (req.user.role !== 'admin' && (!orderUserId || orderUserId !== req.user._id.toString())) {
             return res.status(403).json({
                 success: false,
                 message: 'Unauthorized to view this order record'
