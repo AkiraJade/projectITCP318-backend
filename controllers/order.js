@@ -104,6 +104,19 @@ exports.newOrder = async (req, res, next) => {
             user: req.user._id
         });
 
+        // 📧 Send order confirmation email with receipt PDF
+        try {
+            const pdfBuffer = await generateReceiptPDF(order, req.user.name);
+            await sendOrderStatusEmail({
+                email: req.user.email,
+                customerName: req.user.name,
+                order,
+                pdfBuffer
+            });
+        } catch (emailErr) {
+            console.error('Order confirmation email error:', emailErr.message);
+        }
+
         res.status(201).json({
             success: true,
             order
@@ -467,5 +480,29 @@ exports.salesPerMonth = async (req, res, next) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// Admin: Download PDF receipt for order
+exports.getReceiptPDF = async (req, res, next) => {
+    try {
+        const order = await Order.findById(req.params.id).populate('user', 'name email');
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+        // Authorization: admin or owner
+        const orderUserId = order.user?._id ? order.user._id.toString() : order.user?.toString();
+        if (req.user.role !== 'admin' && (!orderUserId || orderUserId !== req.user._id.toString())) {
+            return res.status(403).json({ success: false, message: 'Unauthorized to download receipt' });
+        }
+        const pdfBuffer = await generateReceiptPDF(order, order.user.name);
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="dosnoventa-receipt-${String(order._id).slice(-8).toUpperCase()}.pdf"`
+        });
+        return res.send(pdfBuffer);
+    } catch (err) {
+        console.error('Receipt download error:', err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
 };
