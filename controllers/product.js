@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const fs = require('fs');
 const Product = require('../models/product')
 const Order = require('../models/order')
 const User = require('../models/user')
@@ -25,21 +26,55 @@ exports.newProduct = async (req, res, next) => {
 
         let imagesLinks = [];
 
+        const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME &&
+            process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloudinary_cloud_name' &&
+            !process.env.CLOUDINARY_CLOUD_NAME.includes('your_');
+
         for (let i = 0; i < images.length; i++) {
-            try {
-                const result = await cloudinary.v2.uploader.upload(images[i], {
-                    folder: 'products',
-                    width: 800,
-                    crop: "scale",
-                });
+            let uploaded = false;
 
-                imagesLinks.push({
-                    public_id: result.public_id,
-                    url: result.secure_url
-                })
+            if (isCloudinaryConfigured) {
+                try {
+                    const result = await cloudinary.v2.uploader.upload(images[i], {
+                        folder: 'products',
+                        width: 800,
+                        crop: "scale",
+                    });
 
-            } catch (error) {
-                console.log('Cloudinary upload error:', error.message)
+                    imagesLinks.push({
+                        public_id: result.public_id,
+                        url: result.secure_url
+                    });
+                    uploaded = true;
+                } catch (error) {
+                    console.log('Cloudinary upload error:', error.message);
+                }
+            }
+
+            if (!uploaded) {
+                // Fallback: If Cloudinary is unconfigured or fails, preserve the uploaded image
+                if (typeof images[i] === 'string' && images[i].startsWith('data:image/')) {
+                    imagesLinks.push({
+                        public_id: `product_${Date.now()}_${i}`,
+                        url: images[i]
+                    });
+                } else if (req.files && req.files[i]) {
+                    try {
+                        const fileBuffer = fs.readFileSync(images[i]);
+                        const mime = req.files[i].mimetype || 'image/jpeg';
+                        imagesLinks.push({
+                            public_id: `product_${Date.now()}_${i}`,
+                            url: `data:${mime};base64,${fileBuffer.toString('base64')}`
+                        });
+                    } catch (e) {
+                        console.log('Local file read error:', e.message);
+                    }
+                } else if (typeof images[i] === 'string' && images[i].length > 0) {
+                    imagesLinks.push({
+                        public_id: `product_${Date.now()}_${i}`,
+                        url: images[i]
+                    });
+                }
             }
         }
 
@@ -178,50 +213,119 @@ exports.getAdminProducts = async (req, res, next) => {
     }
 }
 exports.updateProduct = async (req, res, next) => {
-    let product = await Product.findById(req.params.id);
-    if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: 'Product not found'
-        })
-    }
-    if (req.body.images) {
-        let images = []
-        if (typeof req.body.images === 'string') {
-            images.push(req.body.images)
-        } else {
-            images = req.body.images
+    try {
+        let product = await Product.findById(req.params.id);
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
         }
 
-        let imagesLinks = [];
-        for (let i = 0; i < images.length; i++) {
-            try {
-                const result = await cloudinary.v2.uploader.upload(images[i], {
-                    folder: 'products',
-                    width: 150,
-                    crop: "scale",
-                });
-                imagesLinks.push({
-                    public_id: result.public_id,
-                    url: result.secure_url
-                })
-            } catch (err) {
-                console.log(err);
+        let images = [];
+        if (req.body.images) {
+            if (typeof req.body.images === 'string') {
+                images.push(req.body.images);
+            } else if (Array.isArray(req.body.images)) {
+                images = req.body.images;
             }
+        } else if (req.files && req.files.length > 0) {
+            images = req.files.map(f => f.path);
         }
-        req.body.images = imagesLinks
-    } else {
-        delete req.body.images;
+
+        if (images.length > 0) {
+            let imagesLinks = [];
+
+            const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME &&
+                process.env.CLOUDINARY_CLOUD_NAME !== 'your_cloudinary_cloud_name' &&
+                !process.env.CLOUDINARY_CLOUD_NAME.includes('your_');
+
+            for (let i = 0; i < images.length; i++) {
+                let uploaded = false;
+
+                if (isCloudinaryConfigured) {
+                    try {
+                        const result = await cloudinary.v2.uploader.upload(images[i], {
+                            folder: 'products',
+                            width: 800,
+                            crop: "scale",
+                        });
+                        imagesLinks.push({
+                            public_id: result.public_id,
+                            url: result.secure_url
+                        });
+                        uploaded = true;
+                    } catch (err) {
+                        console.log('Cloudinary upload error in updateProduct:', err.message);
+                    }
+                }
+
+                if (!uploaded) {
+                    // Fallback when Cloudinary is unconfigured or upload fails: preserve the uploaded image
+                    if (typeof images[i] === 'string' && images[i].startsWith('data:image/')) {
+                        imagesLinks.push({
+                            public_id: `product_${Date.now()}_${i}`,
+                            url: images[i]
+                        });
+                    } else if (req.files && req.files[i]) {
+                        try {
+                            const fileBuffer = fs.readFileSync(images[i]);
+                            const mime = req.files[i].mimetype || 'image/jpeg';
+                            imagesLinks.push({
+                                public_id: `product_${Date.now()}_${i}`,
+                                url: `data:${mime};base64,${fileBuffer.toString('base64')}`
+                            });
+                        } catch (e) {
+                            console.log('Local file read error in updateProduct:', e.message);
+                        }
+                    } else if (typeof images[i] === 'string' && images[i].length > 0) {
+                        imagesLinks.push({
+                            public_id: `product_${Date.now()}_${i}`,
+                            url: images[i]
+                        });
+                    }
+                }
+            }
+
+            // Only update images if we obtained valid image links; otherwise preserve existing images!
+            if (imagesLinks.length > 0) {
+                // Delete previous Cloudinary images safely if configured
+                if (isCloudinaryConfigured && product.images && product.images.length > 0) {
+                    for (let i = 0; i < product.images.length; i++) {
+                        const oldId = product.images[i].public_id;
+                        if (oldId && !oldId.startsWith('sample') && !oldId.startsWith('product_')) {
+                            try {
+                                await cloudinary.v2.uploader.destroy(oldId);
+                            } catch (e) {
+                                console.log('Error destroying old image:', e.message);
+                            }
+                        }
+                    }
+                }
+                req.body.images = imagesLinks;
+            } else {
+                delete req.body.images;
+            }
+        } else {
+            delete req.body.images;
+        }
+
+        product = await Product.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true,
+            useFindAndModify: false
+        });
+
+        return res.status(200).json({
+            success: true,
+            product
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
-    product = await Product.findByIdAndUpdate(req.params.id, req.body, {
-        new: true,
-        runValidators: true,
-        useFindandModify: false
-    })
-    return res.status(200).json({
-        success: true,
-        product
-    })
 }
 
 // Soft-delete product => DELETE /api/v1/admin/product/:id
