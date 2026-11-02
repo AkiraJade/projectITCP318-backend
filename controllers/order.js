@@ -179,7 +179,7 @@ exports.getSingleOrder = async (req, res, next) => {
 // Admin: Get all orders => /api/v1/admin/orders
 exports.allOrders = async (req, res, next) => {
     try {
-        const orders = await Order.find().sort({ createdAt: -1 });
+        const orders = await Order.find().populate('user', 'name email').sort({ createdAt: -1 });
         let totalAmount = 0;
         orders.forEach(order => {
             if (order.orderStatus !== 'Cancelled') {

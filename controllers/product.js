@@ -531,19 +531,58 @@ exports.createProductReview = async (req, res, next) => {
 
 exports.getProductReviews = async (req, res, next) => {
     try {
-        if (!req.query.id || !mongoose.Types.ObjectId.isValid(req.query.id)) {
-            return res.status(200).json({ success: true, reviews: [] });
+        if (req.query.id && mongoose.Types.ObjectId.isValid(req.query.id)) {
+            const product = await Product.findById(req.query.id);
+            if (!product) {
+                return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+            const activeReviews = (product.reviews || [])
+                .filter(r => !r.isDeleted)
+                .map(r => ({
+                    ...r.toObject(),
+                    productId: product._id,
+                    productName: product.name
+                }));
+            return res.status(200).json({
+                success: true,
+                product: { _id: product._id, name: product.name },
+                reviews: activeReviews
+            });
         }
 
-        const product = await Product.findById(req.query.id);
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-        const activeReviews = (product.reviews || []).filter(r => !r.isDeleted);
+        // Return all active reviews across all products (for Admin Reviews Manager)
+        const productsWithReviews = await Product.find({
+            'reviews.0': { $exists: true }
+        }).select('_id name reviews isDeleted');
+
+        let allReviews = [];
+        const productsList = [];
+
+        productsWithReviews.forEach(prod => {
+            const activeReviews = (prod.reviews || [])
+                .filter(r => !r.isDeleted)
+                .map(r => ({
+                    ...r.toObject(),
+                    productId: prod._id,
+                    productName: prod.name
+                }));
+
+            if (activeReviews.length > 0) {
+                productsList.push({
+                    _id: prod._id,
+                    name: prod.name,
+                    reviewCount: activeReviews.length
+                });
+                allReviews = allReviews.concat(activeReviews);
+            }
+        });
+
+        allReviews.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
         res.status(200).json({
             success: true,
-            product: { _id: product._id, name: product.name },
-            reviews: activeReviews
+            products: productsList,
+            reviews: allReviews
         });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -553,7 +592,13 @@ exports.getProductReviews = async (req, res, next) => {
 // Soft-delete review => DELETE /api/v1/reviews?id=...&productId=...
 exports.deleteReview = async (req, res, next) => {
     try {
-        const product = await Product.findById(req.query.productId);
+        let product;
+        if (req.query.productId && mongoose.Types.ObjectId.isValid(req.query.productId)) {
+            product = await Product.findById(req.query.productId);
+        } else {
+            product = await Product.findOne({ 'reviews._id': req.query.id });
+        }
+
         if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
