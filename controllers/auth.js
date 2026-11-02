@@ -753,7 +753,8 @@ exports.socialLogin = async (req, res, next) => {
                     public_id: 'default_avatar',
                     url: 'https://res.cloudinary.com/dgneiaky7/image/upload/v1788417006/avatars/sycta145jvdzqjukfgxw.png'
                 },
-                role: 'user'
+                role: 'user',
+                isVerified: true
             });
         }
 
