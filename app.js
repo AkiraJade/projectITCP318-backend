@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const cors = require('cors')
 const cookieParser = require('cookie-parser')
+const connectDatabase = require('./config/database');
 const products = require('./routes/product');
 const auth = require('./routes/auth');
 const order = require('./routes/order');
@@ -34,6 +35,19 @@ app.get('/', (req, res) => {
     });
 });
 
+// Serverless DB connection middleware (ensures Mongoose is ready before running any controller)
+app.use(async (req, res, next) => {
+    try {
+        await connectDatabase();
+        next();
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: `Database connection failed: ${err.message}. If running on Vercel, please verify that '0.0.0.0/0' is whitelisted in MongoDB Atlas Network Access.`
+        });
+    }
+});
+
 const errorMiddleware = require('./middlewares/errors');
 
 app.use('/api/v1', products);
@@ -42,4 +56,4 @@ app.use('/api/v1', order);
 
 app.use(errorMiddleware);
 
-module.exports = app
+module.exports = app;

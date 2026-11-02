@@ -1,26 +1,29 @@
 const mongoose = require('mongoose');
 
-let isConnected = false;
+let cachedPromise = null;
 
 const connectDatabase = async () => {
     if (!process.env.DB_URI) {
-        console.error('MongoDB error: DB_URI environment variable is missing.');
-        return;
+        throw new Error('DB_URI environment variable is missing.');
     }
 
-    if (isConnected || mongoose.connection.readyState >= 1) {
-        return;
+    if (mongoose.connection.readyState >= 1) {
+        return mongoose.connection;
     }
 
-    try {
-        const con = await mongoose.connect(process.env.DB_URI, {
+    if (!cachedPromise) {
+        cachedPromise = mongoose.connect(process.env.DB_URI, {
             serverSelectionTimeoutMS: 5000,
+        }).then((con) => {
+            console.log(`MongoDB Database connected with HOST: ${con.connection.host}`);
+            return con;
+        }).catch((err) => {
+            cachedPromise = null;
+            throw err;
         });
-        isConnected = true;
-        console.log(`MongoDB Database connected with HOST: ${con.connection.host}`);
-    } catch (err) {
-        console.error('MongoDB connection error:', err.message);
     }
+
+    return cachedPromise;
 };
 
 module.exports = connectDatabase;
