@@ -6,9 +6,7 @@ const User = require('../models/user')
 const jwt = require('jsonwebtoken')
 const cloudinary = require('cloudinary')
 const APIFeatures = require('../utils/apiFeatures');
-const BadWordsPkg = require('bad-words');
-const FilterClass = BadWordsPkg.Filter || BadWordsPkg;
-const badWordsFilter = new FilterClass();
+const badWordsFilter = require('../utils/profanityFilter');
 
 exports.newProduct = async (req, res, next) => {
     try {
